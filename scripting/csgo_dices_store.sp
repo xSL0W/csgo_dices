@@ -26,7 +26,7 @@ public Plugin myinfo =
 	name = "Store/Shop: Dices",
 	author = "xSLOW",
 	description = "Gamble your credits.",
-	version = "1.0",
+	version = "1.1",
 	url = "https://steamcommunity.com/profiles/76561193897443537"
 };
 
