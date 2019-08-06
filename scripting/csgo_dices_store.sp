@@ -93,6 +93,9 @@ public Action Command_Dices(int client, int args)
     GetCmdArg(2, iBetValue, sizeof(iBetValue));
     int BetValue = StringToInt(iBetValue);
 
+    if (Target == 0 || Target == -1) 
+        return Plugin_Handled;
+
     if(client == Target)
     {
 		ReplyToCommand(client, "%s \x07You cant challenge yourself!", CHAT_PREFIX);
