@@ -2,6 +2,7 @@
 #include <menu-stocks>
 #include <clientprefs>
 #include <store>
+#include <emitsoundany>
 
 #pragma semicolon 1;
 #pragma newdecls required;
@@ -12,21 +13,26 @@
 
 #define CHAT_PREFIX "* \x04[Dices]\x01 -"
 
+#define WINNER_SOUND "ui/coin_pickup_01.wav"
+#define LOSER_SOUND "ui/xp_rankdown_02.wav"
+#define NOBODY_SOUND "ui/weapon_cant_buy.wav"
+
 ConVar cv_EnablePlugin;
 ConVar cv_MinBetValue;
 ConVar cv_MaxBetValue;
+//ConVar cv_ShowMessages;
 
 Handle Dices_Cookie;
 
 bool AreDicesEnabled[MAXPLAYERS + 1];
-//bool IsAlreadyPlaying[MAXPLAYERS + 1];
+bool IsAlreadyPlaying[MAXPLAYERS + 1];
 
 public Plugin myinfo = 
 {
-	name = "Store/Shop: Dices",
+	name = "Store/Store: Dices",
 	author = "xSLOW",
 	description = "Gamble your credits.",
-	version = "1.1",
+	version = "1.2",
 	url = "https://steamcommunity.com/profiles/76561193897443537"
 };
 
@@ -38,6 +44,7 @@ public void OnPluginStart()
     cv_EnablePlugin = CreateConVar("sm_dices_enableplugin", "1", "Enable plugin? 1 = true / 0 = false");
     cv_MinBetValue = CreateConVar("sm_dices_minbetvalue", "100", "Min bet value");
     cv_MaxBetValue = CreateConVar("sm_dices_maxbetvalue", "1000000", "Max bet value");
+//   cv_ShowMessages = CreateConVar("sm_dices_showmessages", "3", "0 = No messages, 1= Chat Messages, 2= Hint Messages, 3= Chat + Hint messages");
 
     Dices_Cookie = RegClientCookie("Dices On/Off", "Dices On/Off", CookieAccess_Protected);
 
@@ -52,6 +59,29 @@ public void OnPluginStart()
         RegConsoleCmd("sm_diceson", Command_DicesON);
         RegConsoleCmd("sm_barbuton", Command_DicesON);      // RO Version
     }
+}
+
+
+public void OnMapStart() {
+
+    if(FileExists(WINNER_SOUND))
+    {
+        AddFileToDownloadsTable(WINNER_SOUND);
+    }
+
+    if(FileExists(LOSER_SOUND))
+    {
+        AddFileToDownloadsTable(LOSER_SOUND);
+    }
+
+    if(FileExists(NOBODY_SOUND))
+    {
+        AddFileToDownloadsTable(LOSER_SOUND);
+    }
+	
+    PrecacheSound(WINNER_SOUND);
+    PrecacheSound(LOSER_SOUND);
+    PrecacheSound(NOBODY_SOUND);
 }
 
 public void OnClientPutInServer(int client)
@@ -94,7 +124,7 @@ public Action Command_Dices(int client, int args)
     int BetValue = StringToInt(iBetValue);
 
     if (Target == 0 || Target == -1) 
-        return Plugin_Handled;
+        return Plugin_Handled;  
 
     if(client == Target)
     {
@@ -114,11 +144,11 @@ public Action Command_Dices(int client, int args)
 		return Plugin_Handled;
     }
 
-    //if(IsAlreadyPlaying[client] || IsAlreadyPlaying[Target])
-    //{
-	//	ReplyToCommand(client, "%s \x07You/Your opponent already playing", CHAT_PREFIX);
-	//	return Plugin_Handled;
-    //}
+    if(IsAlreadyPlaying[client] == true || IsAlreadyPlaying[Target] == true)
+    {
+		ReplyToCommand(client, "%s \x07You/Your opponent already playing", CHAT_PREFIX);
+		return Plugin_Handled;
+    }
 
     if(AreDicesEnabled[client] == false || AreDicesEnabled[Target] == false) 
 	{
@@ -128,35 +158,46 @@ public Action Command_Dices(int client, int args)
 
 
     if(IsClientValid(Target))
+    {
+        PrintToChat(client, "%s You have sent an invite to \x04%N (\x03%d \x01credits).", CHAT_PREFIX, Target, BetValue);
         AskTarget(client, Target, BetValue);
+    }
 
     return Plugin_Handled;
 }
 
+
 public void AskTarget(int client, int target, int BetValue)
 {
-	Menu DicesMenu = new Menu(AskTargetHandler, MENU_ACTIONS_DEFAULT);
-	char MenuTitle[50];
-	FormatEx(MenuTitle, sizeof(MenuTitle), "Dices: (%N) [%i Credits]", client, BetValue);
-	DicesMenu.SetTitle(MenuTitle);
-	DicesMenu.AddItem(DISABLED, "Be careful which button do you choose..", ITEMDRAW_DISABLED);
-	DicesMenu.AddItem(DISABLED, "...you risk to lose all your credits...", ITEMDRAW_DISABLED);
-	DicesMenu.AddItem(DISABLED, "... by pressing random buttons.", ITEMDRAW_DISABLED);
-	DicesMenu.AddItem(DISABLED, "", ITEMDRAW_SPACER);
-	DicesMenu.AddItem(ACCEPT, "Accept");
-	DicesMenu.AddItem(REJECT, "Reject");
+    IsAlreadyPlaying[client] = true;
+    IsAlreadyPlaying[target] = true;
+
+    Menu DicesMenu = new Menu(AskTargetHandler, MENU_ACTIONS_DEFAULT);
+    char MenuTitle[50];
+    FormatEx(MenuTitle, sizeof(MenuTitle), "Dices: (%N) [%i Credits]", client, BetValue);
+    DicesMenu.SetTitle(MenuTitle);
+    DicesMenu.AddItem(DISABLED, "Be careful which button do you choose..", ITEMDRAW_DISABLED);
+    DicesMenu.AddItem(DISABLED, "...you risk to lose all your credits...", ITEMDRAW_DISABLED);
+    DicesMenu.AddItem(DISABLED, "... by pressing random buttons.", ITEMDRAW_DISABLED);
+    DicesMenu.AddItem(DISABLED, "", ITEMDRAW_SPACER);
+    DicesMenu.AddItem(ACCEPT, "Accept");
+    DicesMenu.AddItem(REJECT, "Reject");
 	
-	PushMenuCell(DicesMenu, "Client", client);
-	PushMenuCell(DicesMenu, "Credits", BetValue);
-	
-	DicesMenu.ExitButton = false;
-	DicesMenu.Display(target, 15);
+    PushMenuCell(DicesMenu, "Client", client);
+    PushMenuCell(DicesMenu, "Target", target);
+    PushMenuCell(DicesMenu, "Credits", BetValue);
+
+    DicesMenu.ExitButton = false;
+    DicesMenu.Display(target, 15);
 }
 
 
 public int AskTargetHandler(Menu DicesMenu, MenuAction action, int param1, int param2)
 {
-	switch(action)
+    int client = GetMenuCell(DicesMenu, "Client");
+    int target = GetMenuCell(DicesMenu, "Target");
+
+    switch(action)
 	{
 		case MenuAction_Select:
 		{
@@ -168,19 +209,27 @@ public int AskTargetHandler(Menu DicesMenu, MenuAction action, int param1, int p
 				RollTheDices(GetMenuCell(DicesMenu, "Client"), param1, GetMenuCell(DicesMenu, "Credits"));
 			}
 			else
-				PrintToChat(GetMenuCell(DicesMenu, "Client"), "%s \x0D%N\x01 \x07rejected\x01 your challenge for \x10%i credits.", CHAT_PREFIX, param1, GetMenuCell(DicesMenu, "Credits"));
+            {
+                PrintToChat(GetMenuCell(DicesMenu, "Client"), "%s \x0D%N\x01 \x07rejected\x01 your challenge for \x10%i credits.", CHAT_PREFIX, param1, GetMenuCell(DicesMenu, "Credits"));
+                IsAlreadyPlaying[client] = false;
+                IsAlreadyPlaying[target] = false;
+            }
 		}
 		
 		case MenuAction_Cancel:
-			PrintToChat(GetMenuCell(DicesMenu, "Client"), "%s Challenge to \x0D%N\x01 was cancelled.", CHAT_PREFIX, param1);
+        {
+            PrintToChat(GetMenuCell(DicesMenu, "Client"), "%s Challenge to \x0D%N\x01 was cancelled.", CHAT_PREFIX, param1);
+            IsAlreadyPlaying[client] = false;
+            IsAlreadyPlaying[target] = false;
+        }
 	}
 }
 
 
 public void RollTheDices(int client, int target, int BetValue)
 {
-    //IsAlreadyPlaying[client] = true;
-    //IsAlreadyPlaying[target] = true;
+    Store_SetClientCredits(target, Store_GetClientCredits(target) - BetValue);
+    Store_SetClientCredits(client, Store_GetClientCredits(client) - BetValue);
 
     int ClientFirstDice = GetRandomInt(1,6);
     int ClientSecondDice = GetRandomInt(1,6);
@@ -192,26 +241,48 @@ public void RollTheDices(int client, int target, int BetValue)
 
     if(ClientSumDices > TargetSumDices)
     {
-        Store_SetClientCredits(client, Store_GetClientCredits(client) + BetValue);
-        Store_SetClientCredits(target, Store_GetClientCredits(target) - BetValue);
-        PrintToChatAll("%s \x0D%N\x01 rolls \x03(%d %d)\x01 VS \x0D%N\x01 rolls \x03(%d %d).", CHAT_PREFIX, client, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice);
-        PrintToChatAll("%s \x0D%N \x06won \x10%d credits.", CHAT_PREFIX, client, BetValue);
+        Store_SetClientCredits(client, Store_GetClientCredits(client) + BetValue*2);
+
+        PrintToChat(client, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 and you \x04won \x10%d credits.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+        PrintToChat(target, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 and you \x02lost \x10%d credits.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+
+        PrintCenterText(client, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> and you <font color='#2FDE0C'>won</font> %d credits.</center>", ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+        PrintCenterText(target, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> and you <font color='#F61B01'>lost</font> %d credits.</center>", TargetFirstDice, TargetSecondDice, client, ClientFirstDice, ClientSecondDice, BetValue);
+
+        EmitSoundToClient(client, WINNER_SOUND);
+        EmitSoundToClient(target, LOSER_SOUND);
     }
     else if(ClientSumDices < TargetSumDices)
     {
-        Store_SetClientCredits(target, Store_GetClientCredits(target) + BetValue);
-        Store_SetClientCredits(client, Store_GetClientCredits(client) - BetValue);
-        PrintToChatAll("%s \x0D%N\x01 rolls \x03(%d %d)\x01 VS \x0D%N\x01 rolls \x03(%d %d)\x01.", CHAT_PREFIX, client, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice);
-        PrintToChatAll("%s \x0D%N \x06won \x10%d credits.", CHAT_PREFIX, target, BetValue);
+
+        Store_SetClientCredits(target, Store_GetClientCredits(target) + BetValue*2);
+
+        PrintToChat(client, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 and you \x02lost \x10%d credits.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+        PrintToChat(target, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 and you \x04won \x10%d credits.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+
+        PrintCenterText(client, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> and you <font color='#F61B01'>lost</font> %d credits.</center>", ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+        PrintCenterText(target, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> and you <font color='#2FDE0C'>won</font> %d credits.</center>", TargetFirstDice, TargetSecondDice, client, ClientFirstDice, ClientSecondDice, BetValue);
+
+        EmitSoundToClient(target, WINNER_SOUND);
+        EmitSoundToClient(client, LOSER_SOUND);
     }
     else
     {
-        PrintToChatAll("%s \x0D%N\x01 rolls \x03(%d %d)\x01 VS \x0D%N\x01 rolls \x03(%d %d)\x01.", CHAT_PREFIX, client, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice);
-        PrintToChatAll("%s \x02Nobody wins", CHAT_PREFIX);
+        Store_SetClientCredits(target, Store_GetClientCredits(target) + BetValue);
+        Store_SetClientCredits(client, Store_GetClientCredits(client) + BetValue);
+        
+        PrintToChat(client, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 but \x02nobody won.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice);
+        PrintToChat(target, "%s \x0DYou\x01 rolled \x03(%d %d)\x01 against \x0D%N\x01 \x03(%d %d)\x01 but \x02nobody won.", CHAT_PREFIX, ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice);
+
+        PrintCenterText(client, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> <font color='#F61B01'>but nobody won.</font></center>", ClientFirstDice, ClientSecondDice, target, TargetFirstDice, TargetSecondDice, BetValue);
+        PrintCenterText(target, "<center>You rolled <font color='#F04B03'>(%d %d)</font> against <font color='#00FF8F'>%N</font> <font color='#F04B03'>(%d %d)</font> <font color='#F61B01'>but nobody won.</font></center>", TargetFirstDice, TargetSecondDice, client, ClientFirstDice, ClientSecondDice, BetValue);
+
+        EmitSoundToClient(target, NOBODY_SOUND);
+        EmitSoundToClient(client, NOBODY_SOUND);
     }
 
-    //IsAlreadyPlaying[client] = false;
-    //IsAlreadyPlaying[target] = false;
+    IsAlreadyPlaying[client] = false;
+    IsAlreadyPlaying[target] = false;
 }
 
 bool IsClientValid(int client)
